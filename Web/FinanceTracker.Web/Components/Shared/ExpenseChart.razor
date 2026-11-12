@@ -1,0 +1,13 @@
+@if (Points.Count == 0)
+{ <div class="empty"><Icon Name="budget" /><h3>Пока нет расходов</h3><p>Категории появятся после первой покупки.</p></div> }
+else
+{
+    <MudChart ChartType="ChartType.Donut" InputData="@Points.Select(p => (double)p.Value).ToArray()" InputLabels="@Points.Select(p => p.Label).ToArray()" ChartOptions="options" Width="100%" Height="210px" />
+    <div class="chart-legend">@for (var i = 0; i < Points.Count; i++) { var p = Points[i]; <div><span class="legend-label"><i class="legend-dot" style="background:@options.ChartPalette[i % options.ChartPalette.Length]"></i>@p.Label</span><strong>@p.Value.ToString("N0") ₽</strong></div> }</div>
+}
+@code {
+    [Parameter] public List<ChartPoint> Points { get; set; } = [];
+    private readonly ChartOptions options = new() { ShowLegend = false, ChartPalette = ["#EF3124", "#A9251D", "#FF897F", "#D9D9D6", "#747A7B", "#444849"] };
+}
+
+

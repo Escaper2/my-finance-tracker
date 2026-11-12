@@ -1,0 +1,83 @@
+@page "/"
+@inherits FinancePage
+@inject ReportService Reports
+@inject CatalogService Catalog
+@inject BudgetService Budgets
+@inject TransactionService Transactions
+<PageTitle>Обзор · finflow</PageTitle>
+<div class="page-heading"><div><div class="eyebrow">ВАША ФИНАНСОВАЯ КАРТИНА</div><h1>Мои финансы<span>↘</span></h1><p>Доходы, расходы и планы — в одном месте.</p></div><a class="button primary" href="/transactions?new=true"><Icon Name="plus" /> Добавить операцию</a></div>
+<div class="toolbar">
+    <label>С <input type="date" @bind="from" @bind:event="oninput" /></label><label>По <input type="date" @bind="to" @bind:event="oninput" /></label>
+    <label>Счёт<select @bind="accountId"><option value="">Все счета</option>@foreach (var a in accounts) { <option value="@a.Id">@a.Name</option> }</select></label>
+    <button class="button" @onclick="ReloadSafe">Показать</button>
+</div>
+@if (Error != null) { <div class="notice error">@Error</div> }
+@if (report != null)
+{
+    <div class="stat-grid">
+        <article class="stat balance"><div>Общий остаток <Icon Name="arrow-up" /></div><strong>@Money(report.Balance)</strong><small>На счетах сейчас</small><a class="balance-link" href="/accounts">Счета и остатки <Icon Name="arrow-right" /></a></article>
+        <article class="stat"><div>Доходы <Icon Name="arrow-down" /></div><strong>@Money(report.Income)</strong><small>За выбранный период</small></article>
+        <article class="stat"><div>Расходы <Icon Name="arrow-up" /></div><strong>@Money(report.Expense)</strong><small>За выбранный период</small></article>
+        <article class="stat"><div>Разница <Icon Name="balance" /></div><strong class="@(report.Income >= report.Expense ? "positive" : "warm")">@Money(report.Income - report.Expense)</strong><small>Доходы минус расходы</small></article>
+    </div>
+    <div class="account-strip" aria-label="Мои счета">
+        @foreach (var a in accounts.Where(a => !a.IsArchived))
+        {
+            <a class="account-pill" href="/accounts"><Icon Name="wallet" /><span>@a.Name<strong>@Money(a.Balance)</strong></span></a>
+        }
+        <a class="account-pill add-account" href="/accounts"><Icon Name="plus" /><span>Мои счета</span></a>
+    </div>
+    <div class="chart-grid">
+        <section class="panel"><div class="section-title"><h2>Движение денег</h2><span class="muted">По месяцам</span></div>
+            @if (report.Months.Any(m => m.Income > 0 || m.Expense > 0))
+            { <MudChart ChartType="ChartType.Bar" ChartSeries="@series" XAxisLabels="@labels" ChartOptions="chartOptions" Width="100%" Height="280px" /> }
+            else { <div class="empty"><Icon Name="arrow-up" /><h3>Первые шаги к ясности</h3><p>Добавьте доход или расход, чтобы увидеть динамику.</p></div> }
+        </section>
+        <section class="panel"><div class="section-title"><h2>Куда уходят деньги</h2><span class="pill">Расходы</span></div>
+            <ExpenseChart Points="report.Categories" />
+        </section>
+    </div>
+    <div class="bottom-grid">
+        <section class="panel"><div class="section-title"><h2>Последние операции</h2><a href="/transactions">Все операции ↗</a></div>
+            @if (recent.Count == 0) { <p class="empty-small">Здесь появятся ваши операции.</p> }
+            @foreach (var t in recent)
+            {
+                <div class="activity"><span class="category-icon"><Icon Name="@t.Icon" /></span><div><strong>@t.Description</strong><small>@t.Category · @t.Date.ToString("dd MMM")</small></div><b class="@(t.Type == TransactionType.Income ? "positive" : "")">@(t.Type == TransactionType.Income ? "+" : "−")@Money(t.Amount)</b></div>
+            }
+        </section>
+        <section class="panel"><div class="section-title"><h2>Бюджеты месяца</h2><a href="/budgets">Все ↗</a></div><p class="muted">@DateTime.Today.ToString("MMMM yyyy") · все счета</p>
+            @if (budgetItems.Count == 0) { <p class="empty-small">Задайте первый лимит, чтобы следить за расходами.</p><a class="button" href="/budgets">Создать бюджет</a> }
+            @foreach (var b in budgetItems.Take(4))
+            { <div class="budget-mini"><div><strong>@b.Category</strong><span>@b.Percent.ToString("0")%</span></div><progress max="100" value="@Math.Min(100,b.Percent).ToString(CultureInfo.InvariantCulture)" class="@(b.Percent >= 100 ? "over" : "")"></progress><small>@Money(b.Spent) из @Money(b.Limit)</small></div> }
+        </section>
+    </div>
+}
+@code {
+    private DateTime from = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime to = DateTime.Today;
+    private Guid? accountId;
+    private Report? report;
+    private List<AccountView> accounts = [];
+    private List<BudgetView> budgetItems = [];
+    private List<TransactionView> recent = [];
+    private List<ChartSeries> series = [];
+    private string[] labels = [];
+    private readonly ChartOptions chartOptions = new() { MaxNumYAxisTicks = 6, YAxisFormat = "N0", ChartPalette = ["#D9D9D6", "#EF3124"] };
+    protected override async Task Refresh()
+    {
+        report = await Reports.Get(DateOnly.FromDateTime(from), DateOnly.FromDateTime(to), accountId);
+        accounts = await Catalog.Accounts();
+        budgetItems = await Budgets.List(DateOnly.FromDateTime(DateTime.Today));
+        recent = (await Transactions.List(new() { From = DateOnly.FromDateTime(from), To = DateOnly.FromDateTime(to), AccountId = accountId, PageSize = 5 })).Items;
+        labels = report.Months.Select(m => m.Label).ToArray();
+        var maximum = report.Months.Max(m => Math.Max(m.Income, m.Expense));
+        var step = Math.Max(1, Math.Ceiling(maximum / 5));
+        var magnitude = (decimal)Math.Pow(10, Math.Floor(Math.Log10((double)step)));
+        chartOptions.YAxisTicks = (int)Math.Min(int.MaxValue, Math.Ceiling(step / magnitude) * magnitude);
+        series = [new() { Name = "Доходы", Data = report.Months.Select(m => (double)m.Income).ToArray() }, new() { Name = "Расходы", Data = report.Months.Select(m => (double)m.Expense).ToArray() }];
+    }
+    private static string Money(decimal value) => value.ToString("N2") + " ₽";
+}
+
+
+

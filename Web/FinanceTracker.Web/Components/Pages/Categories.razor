@@ -1,0 +1,35 @@
+@page "/categories"
+@inherits FinancePage
+@inject CatalogService Catalog
+<PageTitle>Категории · finflow</PageTitle>
+<div class="page-heading"><div><div class="eyebrow">У КАЖДОЙ ТРАТЫ ЕСТЬ МЕСТО</div><h1>Категории<span>.</span></h1><p>Организуйте доходы и расходы так, как удобно вам.</p></div><button class="button primary" @onclick="New"><Icon Name="plus" /> Категория</button></div>
+@if (Error != null) { <div class="notice error">@Error</div> }
+@if (editing)
+{
+    <section class="panel editor"><h2>@(id.HasValue ? "Изменить категорию" : "Новая категория")</h2><form @onsubmit="Save" @onsubmit:preventDefault>
+        <div class="form-grid"><label>Название<input required maxlength="80" @bind="name" @bind:event="oninput" /></label>
+            <label>Тип<select @bind="type" disabled="@id.HasValue"><option value="@TransactionType.Expense">Расход</option><option value="@TransactionType.Income">Доход</option></select></label>
+            <label>Цвет<input type="color" @bind="color" /></label><label>Значок<div class="icon-select"><span class="category-icon"><Icon Name="@icon" /></span><select @bind="icon">@foreach (var item in iconOptions) { <option value="@item.Symbol">@item.Label</option> }</select></div></label>
+        </div><div class="form-actions"><button class="button primary" disabled="@Busy">Сохранить</button><button class="button" type="button" @onclick="() => editing = false">Отмена</button></div></form></section>
+}
+@foreach (var group in categories.GroupBy(c => c.Type))
+{
+    <h2 class="group-title">@(group.Key == TransactionType.Expense ? "Расходы" : "Доходы")</h2>
+    <div class="category-grid">@foreach (var c in group)
+    {
+        <article class="panel category-card @(c.IsArchived ? "archived" : "")"><span class="category-icon" style="--category-color:@c.Color"><Icon Name="@c.Icon" /></span><div><strong>@c.Name</strong><small>@(c.IsArchived ? "В архиве" : "Активна")</small></div><button class="text-button" @onclick="() => Edit(c)">Изменить</button><button class="text-button" disabled="@Busy" @onclick="() => Execute(() => Catalog.ArchiveCategory(c.Id, !c.IsArchived))">@(c.IsArchived ? "Вернуть" : "В архив")</button></article>
+    }</div>
+}
+@code {
+    private List<Category> categories = [];
+    private readonly (string Symbol, string Label)[] iconOptions = [("●", "Метка"), ("◈", "Продукты"), ("☕", "Кафе"), ("↗", "Транспорт"), ("⌂", "Дом"), ("+", "Здоровье"), ("◇", "Покупки"), ("↙", "Доход"), ("★", "Избранное")];
+    private bool editing; private Guid? id; private string name = "", color = "#EF3124", icon = "●"; private TransactionType type;
+    protected override async Task Refresh() => categories = await Catalog.Categories();
+    private void New() { id = null; name = ""; type = TransactionType.Expense; editing = true; }
+    private void Edit(Category c) { id = c.Id; name = c.Name; color = c.Color; icon = c.Icon; type = c.Type; editing = true; }
+    private async Task Save() { if (await Execute(() => Catalog.SaveCategory(id, name, type, color, icon))) editing = false; }
+}
+
+
+
+

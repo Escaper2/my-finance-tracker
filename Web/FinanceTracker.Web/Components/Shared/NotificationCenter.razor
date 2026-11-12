@@ -1,0 +1,54 @@
+@implements IDisposable
+@inject NotificationService Notifications
+@inject ChangeBus Changes
+@inject ISnackbar Snackbar
+<div class="notification-root">
+    <button class="notification-toggle" @onclick="() => open = !open" aria-expanded="@open" aria-label="Уведомления">
+        <Icon Name="bell" /><span class="notification-label">Уведомления</span> @if (items.Count(n => !n.IsRead) > 0) { <b>@items.Count(n => !n.IsRead)</b> }
+    </button>
+    @if (open)
+    {
+        <section class="notification-panel" aria-label="Список уведомлений">
+            <div class="panel-heading"><strong>Уведомления</strong><button class="text-button" @onclick="ReadAll">Прочитать все</button></div>
+            @if (error != null) { <p class="notice error">@error</p> }
+            @if (items.Count == 0) { <p class="empty-small">Пока всё спокойно. Здесь появятся предупреждения о бюджетах.</p> }
+            @foreach (var item in items)
+            {
+                <article class="notification-item @(item.IsRead ? "" : "unread")">
+                    <a href="/budgets" @onclick="() => Read(item.Id)">@item.Message</a>
+                    <small>@item.CreatedAt.ToLocalTime().ToString("dd.MM HH:mm")</small>
+                    @if (!item.IsRead) { <button class="text-button" @onclick="() => Read(item.Id)">Прочитано</button> }
+                </article>
+            }
+        </section>
+    }
+</div>
+@code {
+    private List<Notification> items = [];
+    private HashSet<Guid> seen = [];
+    private bool open, disposed;
+    private string? error;
+    protected override async Task OnInitializedAsync()
+    {
+        Changes.Changed += Changed;
+        try { items = await Notifications.List(); seen = items.Select(n => n.Id).ToHashSet(); }
+        catch { error = "Не удалось загрузить уведомления."; }
+    }
+    private void Changed() => _ = InvokeAsync(async () =>
+    {
+        if (disposed) return;
+        try
+        {
+            items = await Notifications.List();
+            foreach (var n in items.Where(n => !n.IsRead && seen.Add(n.Id)))
+                Snackbar.Add(n.Message, Severity.Warning);
+            StateHasChanged();
+        }
+        catch { error = "Не удалось обновить уведомления."; }
+    });
+    private async Task Read(Guid id) { try { await Notifications.MarkRead(id); } catch { error = "Не удалось отметить уведомление."; } }
+    private async Task ReadAll() { try { await Notifications.MarkRead(); } catch { error = "Не удалось отметить уведомления."; } }
+    public void Dispose() { disposed = true; Changes.Changed -= Changed; }
+}
+
+

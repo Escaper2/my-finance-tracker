@@ -1,0 +1,39 @@
+@inherits LayoutComponentBase
+@inject IConfiguration Configuration
+<MudThemeProvider Theme="_theme" IsDarkMode="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<div class="shell">
+    <header class="app-header">
+        <div class="header-line">
+            <a class="brand" href="/" aria-label="finflow — на главную"><span class="brand-mark"><Icon Name="transactions" /></span><span>finflow<span class="brand-dot">.</span></span></a>
+            <div class="workspace-label">Личное пространство <span>RUB · @(Configuration.GetValue<bool>("Database:SeedDemo") ? "Демо" : "Мои финансы")</span></div>
+            <div class="header-actions"><NotificationCenter /><span class="avatar" title="Личное пространство">Я</span></div>
+        </div>
+        <nav class="main-nav" aria-label="Основная навигация">
+            <NavLink href="/" Match="NavLinkMatch.All"><Icon Name="overview" /><span>Обзор</span></NavLink>
+            <NavLink href="/transactions"><Icon Name="transactions" /><span>Операции</span></NavLink>
+            <NavLink href="/accounts"><Icon Name="wallet" /><span>Счета</span></NavLink>
+            <NavLink href="/budgets"><Icon Name="budget" /><span>Бюджеты</span></NavLink>
+            <NavLink href="/categories"><Icon Name="category" /><span>Категории</span></NavLink>
+            <NavLink href="/import"><Icon Name="upload" /><span>Импорт</span></NavLink>
+        </nav>
+    </header>
+    <main><ErrorBoundary><ChildContent>@Body</ChildContent><ErrorContent><div class="notice error">Не удалось отобразить страницу. <a href="/">Вернуться к обзору</a></div></ErrorContent></ErrorBoundary></main>
+    <footer><span class="footer-brand">finflow.</span><span>Деньги под вашим контролем.</span><span>Личное пространство / RUB</span></footer>
+</div>
+@code {
+    private readonly MudTheme _theme = new()
+    {
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#EF3124", Secondary = "#D9D9D6", Background = "#090909", Surface = "#181818",
+            TextPrimary = "#F2F2EF", TextSecondary = "#A2A2A0", Divider = "#303030",
+            Success = "#D9D9D6", Warning = "#FF897F", Error = "#FF897F"
+        },
+        Typography = new Typography { Default = new DefaultTypography { FontFamily = ["Manrope", "Arial", "sans-serif"] } }
+    };
+}
+
+

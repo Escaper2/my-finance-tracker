@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <base href="/" />
+    <meta name="theme-color" content="#090909" />
+    <link rel="preload" href="fonts/Unbounded.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="preload" href="fonts/Manrope.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="stylesheet" href="_content/MudBlazor/MudBlazor.min.css" />
+    <link rel="stylesheet" href="app.css" />
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+<body>
+    <Routes @rendermode="InteractiveServer" />
+    <div id="blazor-error-ui">Соединение прервано. <a href="">Перезагрузить страницу</a></div>
+    <script src="_framework/blazor.web.js"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+</body>
+</html>
+
+

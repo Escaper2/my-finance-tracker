@@ -1,0 +1,72 @@
+@page "/import"
+@inherits FinancePage
+@inject ImportService Imports
+@inject CatalogService Catalog
+<PageTitle>Импорт CSV · finflow</PageTitle>
+<div class="page-heading"><div><div class="eyebrow">МЕНЬШЕ РУТИНЫ</div><h1>Импорт выписки<span>.</span></h1><p>Загрузите CSV, проверьте данные — остальное сделаем мы.</p></div><a class="button" href="sample.csv" download><Icon Name="download" /> Пример CSV</a></div>
+@if (Error != null) { <div class="notice error">@Error</div> }
+@if (success != null) { <div class="notice success">@success</div> }
+<div class="import-grid">
+    <section class="panel"><h2>1. Выберите счёт и файл</h2>
+        <label>Счёт для импорта<select @bind="accountId"><option value="">Выберите счёт</option>@foreach (var a in accounts.Where(a => !a.IsArchived)) { <option value="@a.Id">@a.Name</option> }</select></label>
+        <div class="upload-zone"><Icon Name="upload" /><strong>Ваша банковская выписка</strong><p>CSV в UTF-8 · до 2 МБ · до 20 000 строк</p><InputFile OnChange="LoadFile" accept=".csv,text/csv" /></div>
+        <p class="muted">Исходный файл хранится локально в базе приложения. Импорт продолжится, даже если закрыть вкладку.</p>
+    </section>
+    <section class="panel import-help"><span class="pill">ФОРМАТ ПЕРВОЙ ВЕРСИИ</span><h2>Один понятный формат</h2><p>Подготовьте выписку по примеру. Разделитель — точка с запятой.</p><code>date;amount;type;description;category;bank_id</code>
+        <ul><li>Дата: <b>2026-11-10</b></li><li>Сумма положительная: <b>1250.50</b></li><li>Тип: <b>expense</b> или <b>income</b></li><li>Категория сопоставляется по названию.</li><li><b>bank_id</b> — идентификатор операции банка, если есть.</li></ul>
+        <p>Переводы между своими счетами исключите. Неизвестные категории останутся нераспределёнными.</p>
+        <p>Без bank_id повторные операции в разных файлах не распознаются автоматически.</p>
+    </section>
+</div>
+@if (preview != null)
+{
+    <section class="panel"><div class="section-title"><h2>2. Проверьте перед импортом</h2><span class="pill">@fileName</span></div>
+        <p>Корректных строк: <b>@preview.Rows.Count</b> · Ошибок: <b>@preview.Errors.Count</b>. Ниже первые 8 операций.</p>
+        <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Описание</th><th>Категория</th><th>Тип</th><th class="number">Сумма</th></tr></thead><tbody>
+            @foreach (var row in preview.Rows.Take(8)) { <tr><td>@row.Date.ToString("dd.MM.yyyy")</td><td>@row.Description</td><td>@row.Category</td><td>@(row.Type == TransactionType.Expense ? "Расход" : "Доход")</td><td class="number">@row.Amount.ToString("N2") ₽</td></tr> }
+        </tbody></table></div>
+        @foreach (var e in preview.Errors.Take(8)) { <p class="danger-text">Строка @e.Number: @e.Message</p> }
+        <button class="button primary" disabled="@(Busy || preview.Rows.Count == 0 || !accountId.HasValue)" @onclick="Queue">Импортировать @preview.Rows.Count операций</button>
+        @if (preview.Errors.Count > 0) { <p class="muted">Строки с ошибками будут пропущены и появятся в отчёте.</p> }
+    </section>
+}
+<section class="panel"><div class="section-title"><h2>История импортов</h2><span class="muted">Последние 30 файлов</span></div>
+    @if (history.Count == 0) { <p class="empty-small">Здесь будут результаты загруженных выписок.</p> }
+    @foreach (var job in history)
+    {
+        <article class="import-job"><div><strong>@job.FileName</strong><small>@job.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @accounts.FirstOrDefault(a => a.Id == job.AccountId)?.Name</small></div><span class="pill">@Status(job.Status)</span>
+            <div class="import-counts">Добавлено: @job.ImportedRows · Дублей: @job.DuplicateRows · Ошибок: @job.ErrorRows</div>
+            @if (job.Status is ImportStatus.Queued or ImportStatus.Processing) { <progress aria-label="Импорт выполняется"></progress> }
+            @if (job.Failure != null) { <p class="danger-text">@job.Failure</p><button class="text-button" @onclick="() => Execute(() => Imports.Retry(job.Id))">Повторить</button> }
+            @if (job.ErrorRows > 0) { <button class="text-button" @onclick="() => ShowErrors(job.Id)">Показать ошибки</button> }
+        </article>
+    }
+    @if (errors.Count > 0) { <div class="notice"><h3>Ошибки выбранного импорта (до 200 строк)</h3>@foreach (var e in errors) { <p>Строка @e.RowNumber: @e.Message</p> }</div> }
+</section>
+@code {
+    private List<AccountView> accounts = []; private List<ImportJob> history = []; private List<ImportRowError> errors = [];
+    private Guid? accountId; private string content = "", fileName = ""; private CsvPreview? preview; private string? success;
+    protected override async Task Refresh() { accounts = await Catalog.Accounts(); history = await Imports.History(); }
+    private async Task LoadFile(InputFileChangeEventArgs e)
+    {
+        Error = null; preview = null; success = null;
+        try
+        {
+            var file = e.File; fileName = file.Name;
+            if (!file.Name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Выберите CSV-файл.");
+            using var reader = new StreamReader(file.OpenReadStream(ImportService.MaxBytes), new System.Text.UTF8Encoding(false, true));
+            content = await reader.ReadToEndAsync(); preview = Imports.Preview(content);
+        }
+        catch (Exception ex) { Error = ex is InvalidOperationException ? ex.Message : "Не удалось прочитать файл. Проверьте UTF-8 и размер до 2 МБ."; }
+    }
+    private async Task Queue()
+    {
+        if (!accountId.HasValue) return;
+        if (await Execute(async () => { await Imports.Queue(accountId.Value, fileName, content); }))
+        { preview = null; success = "Файл поставлен в очередь. Результат появится в истории автоматически."; }
+    }
+    private async Task ShowErrors(Guid id) { await Execute(async () => errors = await Imports.Errors(id)); }
+    private static string Status(ImportStatus s) => s switch { ImportStatus.Queued => "В очереди", ImportStatus.Processing => "Обрабатывается", ImportStatus.Completed => "Готово", _ => "Ошибка" };
+}
+
+

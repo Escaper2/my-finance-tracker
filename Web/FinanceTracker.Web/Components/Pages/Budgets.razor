@@ -1,0 +1,41 @@
+@page "/budgets"
+@inherits FinancePage
+@inject BudgetService BudgetsService
+@inject CatalogService Catalog
+@inject MutationRunner Mutations
+<PageTitle>Бюджеты · finflow</PageTitle>
+<div class="page-heading"><div><div class="eyebrow">ПЛАНЫ, КОТОРЫЕ РАБОТАЮТ</div><h1>Бюджеты<span>.</span></h1><p>Задайте границы расходов. Мы предупредим на 90% и 100%.</p></div><button class="button primary" @onclick="New"><Icon Name="plus" /> Создать бюджет</button></div>
+<div class="toolbar"><label>Месяц<input type="month" @bind="month" @bind:after="ReloadSafe" @bind:event="oninput" /></label><span class="muted">Расходы по всем счетам</span></div>
+@if (Error != null) { <div class="notice error">@Error</div> }
+@if (editing)
+{
+    <section class="panel editor"><h2>@(id.HasValue ? "Изменить лимит" : "Новый бюджет")</h2><form @onsubmit="Save" @onsubmit:preventDefault>
+        <div class="form-grid"><label>Категория<select required @bind="categoryId" disabled="@id.HasValue"><option value="">Выберите категорию</option>@foreach (var c in categories.Where(c => !c.IsArchived && c.Type == TransactionType.Expense)) { <option value="@c.Id">@c.Name</option> }</select></label><label>Лимит, ₽<input type="number" min="0.01" step="0.01" required @bind="limit" @bind:event="oninput" /></label></div>
+        <div class="form-actions"><button class="button primary" disabled="@Busy">Сохранить</button><button class="button" type="button" @onclick="() => editing = false">Отмена</button></div></form></section>
+}
+@if (items.Count == 0) { <div class="panel empty"><Icon Name="budget" /><h2>Дайте деньгам ориентир</h2><p>Создайте бюджет на категорию в выбранном месяце.</p></div> }
+<div class="account-grid">@foreach (var b in items)
+{
+    <article class="panel budget-card"><div class="section-title"><h2>@b.Category</h2><span class="pill @(b.Percent >= 100 ? "danger" : "")">@(b.Percent >= 100 ? "Лимит достигнут" : b.Percent >= 90 ? "Почти у лимита" : "В рамках плана")</span></div>
+        <div class="budget-amount">@b.Spent.ToString("N0") ₽ <small>из @b.Limit.ToString("N0") ₽</small></div>
+        <progress max="100" value="@Math.Min(100,b.Percent).ToString(CultureInfo.InvariantCulture)" class="@(b.Percent >= 100 ? "over" : "")"></progress>
+        <div class="budget-caption"><span>@(b.Remaining >= 0 ? "Осталось" : "Превышение") @Math.Abs(b.Remaining).ToString("N2") ₽</span><strong>@b.Percent.ToString("0")%</strong></div>
+        <button class="text-button" @onclick="() => Edit(b)">Изменить лимит</button></article>
+}</div>
+@code {
+    private DateTime month = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private List<BudgetView> items = []; private List<Category> categories = [];
+    private bool editing; private Guid? id, categoryId; private decimal limit = 10000;
+    protected override async Task Refresh() { items = await BudgetsService.List(DateOnly.FromDateTime(month)); categories = await Catalog.Categories(); }
+    private void New() { id = null; categoryId = null; limit = 10000; editing = true; }
+    private void Edit(BudgetView b) { id = b.Id; categoryId = b.CategoryId; limit = b.Limit; editing = true; }
+    private async Task Save()
+    {
+        if (!categoryId.HasValue) { Error = "Выберите категорию."; return; }
+        if (await Execute(() => Mutations.Run(db => BudgetService.Save(db, id, categoryId.Value, DateOnly.FromDateTime(month), limit)))) editing = false;
+    }
+}
+
+
+
+

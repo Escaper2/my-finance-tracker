@@ -1,0 +1,6 @@
+date;amount;type;description;category;bank_id
+2026-11-02;3500.50;expense;Продукты на неделю;Продукты;sample-001
+2026-11-03;650;expense;"Кофе; десерт";Кафе;sample-002
+2026-11-05;85000;income;Зарплата;Зарплата;sample-003
+2026-11-06;1200;expense;Такси;Транспорт;sample-004
+

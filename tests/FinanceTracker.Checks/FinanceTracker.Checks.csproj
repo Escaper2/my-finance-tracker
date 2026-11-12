@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../Infrastructure/FinanceTracker.Infrastructure/FinanceTracker.Infrastructure.csproj" /></ItemGroup>
+</Project>

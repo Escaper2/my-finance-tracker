@@ -1,0 +1,54 @@
+@page "/transactions"
+@inherits FinancePage
+@inject TransactionService Service
+@inject CatalogService Catalog
+<PageTitle>Операции · finflow</PageTitle>
+<div class="page-heading"><div><div class="eyebrow">КАЖДАЯ ОПЕРАЦИЯ НА СВОЁМ МЕСТЕ</div><h1>Операции<span>.</span></h1><p>История ваших решений, больших и маленьких.</p></div><button class="button primary" @onclick="New"><Icon Name="plus" /> Добавить операцию</button></div>
+@if (editing) { <TransactionEditor @key="editorKey" Id="editId" Close="CloseEditor" /> }
+@if (Error != null) { <div class="notice error">@Error</div> }
+<section class="panel">
+    <div class="filter-grid">
+        <label class="search-field">Поиск<input @bind="filter.Search" placeholder="Комментарий к операции" @bind:event="oninput" /></label>
+        <label>Счёт<select @bind="filter.AccountId"><option value="">Все счета</option>@foreach (var a in accounts) { <option value="@a.Id">@a.Name</option> }</select></label>
+        <label>Категория<select @bind="filter.CategoryId"><option value="">Все категории</option>@foreach (var c in categories) { <option value="@c.Id">@c.Name</option> }</select></label>
+        <label>Тип<select @bind="filter.Type"><option value="">Все операции</option><option value="@TransactionType.Expense">Расходы</option><option value="@TransactionType.Income">Доходы</option></select></label>
+        <label>С<input type="date" @bind="filter.From" @bind:event="oninput" /></label><label>По<input type="date" @bind="filter.To" @bind:event="oninput" /></label>
+        <label>Сортировка<select @bind="filter.Sort"><option value="date-desc">Сначала новые</option><option value="date-asc">Сначала старые</option><option value="amount-desc">По убыванию суммы</option></select></label>
+        <label class="checkbox-label"><input type="checkbox" @bind="filter.Uncategorized" />Без категории</label>
+    </div>
+    <div class="form-actions"><button class="button primary" @onclick="Apply">Применить</button><button class="button" @onclick="Reset">Сбросить</button><span class="muted">Найдено: @(page.Total)</span></div>
+    <div class="table-wrap"><table><thead><tr><th>Операция</th><th>Категория</th><th>Счёт</th><th>Дата</th><th class="number">Сумма</th><th><span class="sr-only">Действия</span></th></tr></thead>
+        <tbody>@foreach (var t in page.Items)
+        {
+            <tr><td><div class="transaction-name"><span class="category-icon"><Icon Name="@t.Icon" /></span><strong>@(string.IsNullOrEmpty(t.Description) ? "Без комментария" : t.Description)</strong></div></td><td><span class="pill">@t.Category</span></td><td>@t.Account</td><td>@t.Date.ToString("dd.MM.yyyy")</td><td class="number @(t.Type == TransactionType.Income ? "positive" : "")">@(t.Type == TransactionType.Income ? "+" : "−")@t.Amount.ToString("N2") ₽</td>
+                <td class="row-actions">@if (deleteId == t.Id) { <span>Удалить?</span><button class="text-button danger-text" disabled="@Busy" @onclick="() => Delete(t.Id)">Да</button><button class="text-button" @onclick="() => deleteId = null">Нет</button> }
+                    else { <button class="text-button" @onclick="() => Edit(t.Id)" aria-label="@("Изменить: " + t.Description)">Изменить</button><button class="text-button danger-text" @onclick="() => deleteId = t.Id" aria-label="@("Удалить: " + t.Description)">×</button> }</td></tr>
+        }</tbody></table></div>
+    @if (page.Items.Count == 0) { <div class="empty"><Icon Name="transactions" /><h2>Операций пока нет</h2><p>Добавьте операцию, загрузите CSV или измените фильтры.</p></div> }
+    <div class="pagination"><button class="button" disabled="@(filter.Page <= 1)" @onclick="Previous">← Назад</button><span>Страница @filter.Page из @Math.Max(1,(int)Math.Ceiling(page.Total / (double)filter.PageSize))</span><button class="button" disabled="@(filter.Page * filter.PageSize >= page.Total)" @onclick="Next">Далее →</button></div>
+</section>
+@code {
+    [SupplyParameterFromQuery(Name = "new")] public bool NewRequested { get; set; }
+    private TransactionFilter filter = new();
+    private TransactionPage page = new([], 0);
+    private List<AccountView> accounts = []; private List<Category> categories = [];
+    private bool editing; private Guid? editId, deleteId; private Guid editorKey;
+    protected override async Task OnInitializedAsync() { await base.OnInitializedAsync(); if (NewRequested) New(); }
+    protected override async Task Refresh()
+    {
+        accounts = await Catalog.Accounts(); categories = await Catalog.Categories(); page = await Service.List(filter);
+        if (filter.Page > 1 && page.Items.Count == 0) { filter.Page--; page = await Service.List(filter); }
+    }
+    private void New() { editId = null; editorKey = Guid.NewGuid(); editing = true; }
+    private void Edit(Guid id) { editId = id; editorKey = Guid.NewGuid(); editing = true; }
+    private Task CloseEditor() { editing = false; return ReloadSafe(); }
+    private Task Apply() { filter.Page = 1; return ReloadSafe(); }
+    private Task Reset() { filter = new(); return ReloadSafe(); }
+    private Task Previous() { filter.Page--; return ReloadSafe(); }
+    private Task Next() { filter.Page++; return ReloadSafe(); }
+    private async Task Delete(Guid id) { if (await Execute(() => Service.Delete(id))) deleteId = null; }
+}
+
+
+
+
